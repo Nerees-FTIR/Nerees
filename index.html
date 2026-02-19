@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nerees UFS | Agendamento</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --accent: #f59e0b;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #fbfcfe;
+            -webkit-tap-highlight-color: transparent;
+            color: #1e293b;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .gradient-card {
+            background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+        }
+
+        .fade-in {
+            animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .slide-up {
+            animation: slideUp 0.5s ease-out forwards;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .pulse-soft {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+            }
+        }
+
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1.25rem;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen pb-24">
+
+    <!-- Notificações -->
+    <div id="notification-area"
+        class="fixed top-6 left-0 right-0 z-[60] flex flex-col items-center gap-2 pointer-events-none px-6"></div>
+
+    <!-- Modal de Erro Crítico -->
+    <div id="config-error-modal"
+        class="fixed inset-0 bg-slate-900/90 z-[100] hidden flex-col items-center justify-center p-6 text-center backdrop-blur-md">
+        <div class="bg-white p-8 rounded-3xl max-w-sm w-full shadow-2xl animate-fade-in">
+            <div class="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 text-red-500">
+                <i data-lucide="shield-alert" class="w-8 h-8"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-900 mb-3">Erro de Conexão</h2>
+            <p id="config-error-text" class="text-slate-600 mb-8 leading-relaxed text-sm">Não foi possível conectar ao
+                sistema. Verifique suas configurações do Firebase.</p>
+            <button onclick="location.reload()"
+                class="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl hover:bg-slate-800 transition shadow-lg active:scale-95">Tentar
+                Novamente</button>
+        </div>
+    </div>
+
+    <!-- Cabeçalho Principal -->
+    <header class="glass sticky top-0 z-40 px-6 py-4">
+        <div class="flex items-center justify-between max-w-md mx-auto">
+            <div class="flex items-center gap-3 cursor-pointer" onclick="app.setView('home')">
+                <div class="gradient-card p-2.5 rounded-2xl text-white shadow-md">
+                    <i data-lucide="microscope" class="w-6 h-6"></i>
+                </div>
+                <div class="flex flex-col">
+                    <span class="font-extrabold text-xl tracking-tight leading-none text-slate-900">Nerees</span>
+                    <span class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">UFS •
+                        Pesquisa</span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div id="status-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-300 transition-colors duration-500">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="px-6 py-6 w-full max-w-md mx-auto fade-in" id="main-content">
+        <!-- Loader Inicial -->
+        <div class="flex flex-col items-center justify-center py-40">
+            <div class="relative">
+                <div class="w-12 h-12 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin"></div>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <div class="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                </div>
+            </div>
+            <p class="mt-4 text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Sincronizando...
+            </p>
+        </div>
+    </main>
+
+    <!-- Barra de Navegação Inferior -->
+    <nav
+        class="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 pb-safe z-40 shadow-[0_-8px_30px_rgba(0,0,0,0.04)]">
+        <div class="flex justify-around items-center h-20 max-w-md mx-auto px-6">
+            <button onclick="app.setView('home')" id="nav-home"
+                class="flex flex-col items-center justify-center w-20 h-full text-blue-600 transition-all duration-300">
+                <div class="p-1 rounded-xl transition-all duration-300 bg-blue-50">
+                    <i data-lucide="layout-grid" class="w-6 h-6"></i>
+                </div>
+                <span class="text-[10px] font-bold mt-1 tracking-wide">Início</span>
+            </button>
+
+            <button onclick="app.setView('form')" id="nav-form" class="relative -mt-10 group">
+                <div
+                    class="gradient-card text-white p-5 rounded-3xl shadow-xl shadow-blue-500/30 group-active:scale-90 transition-all duration-300 pulse-soft">
+                    <i data-lucide="plus" class="w-8 h-8"></i>
+                </div>
+            </button>
+
+            <button onclick="app.setView('agenda')" id="nav-agenda"
+                class="flex flex-col items-center justify-center w-20 h-full text-slate-400 transition-all duration-300">
+                <div class="p-1 rounded-xl transition-all duration-300">
+                    <i data-lucide="calendar" class="w-6 h-6"></i>
+                </div>
+                <span class="text-[10px] font-bold mt-1 tracking-wide">Agenda</span>
+            </button>
+        </div>
+    </nav>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBQlWoyujrlYisJjovxouVNwYvXmhR3FWw",
+            authDomain: "cantinhodalimpeza-75a19.firebaseapp.com",
+            projectId: "cantinhodalimpeza-75a19",
+            storageBucket: "cantinhodalimpeza-75a19.firebasestorage.app",
+            messagingSenderId: "173684695494",
+            appId: "1:173684695494:web:2de21d48c8197b340512c7"
+        };
+
+        const fbApp = initializeApp(firebaseConfig);
+        const auth = getAuth(fbApp);
+        const db = getFirestore(fbApp);
+
+        const commonAppId = "nerees_ufs_primary";
+
+        window.app = {
+            state: {
+                requests: [],
+                equipmentList: ["HPLC - Agilent 1260 Infinity (CR.001)", "Outro / Não Listado"],
+                view: 'home',
+                filterEquipment: 'Todos',
+                user: null,
+                formData: { name: '', org: '', email: '', phone: '', equipment: '', customEquipment: '', date: '', startTime: '08:00', endTime: '12:00', reason: '', termsAccepted: false }
+            },
+
+            init() {
+                this.render();
+
+                signInAnonymously(auth).catch((error) => {
+                    console.error("Auth Error:", error);
+                    this.showConfigError("Erro ao autenticar. Verifique o console.");
+                });
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        this.state.user = user;
+                        const statusDot = document.getElementById('status-indicator');
+                        if (statusDot) statusDot.classList.replace('bg-slate-300', 'bg-green-500');
+                        this.setupListeners();
+                    }
+                });
+            },
+
+            showConfigError(msg) {
+                const modal = document.getElementById('config-error-modal');
+                const text = document.getElementById('config-error-text');
+                text.innerHTML = msg;
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                lucide.createIcons();
+            },
+
+            setupListeners() {
+                const reqRef = collection(db, 'artifacts', commonAppId, 'public', 'data', 'requests');
+                onSnapshot(reqRef, (s) => {
+                    this.state.requests = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                    this.render();
+                });
+
+                const equipRef = doc(db, 'artifacts', commonAppId, 'public', 'data', 'settings', 'equipment');
+                onSnapshot(equipRef, (s) => {
+                    if (s.exists() && s.data().list) {
+                        this.state.equipmentList = s.data().list;
+                        if (!this.state.formData.equipment) this.state.formData.equipment = this.state.equipmentList[0];
+                        this.render();
+                    }
+                });
+            },
+
+            setView(viewName) {
+                this.state.view = viewName;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                this.render();
+
+                ['home', 'form', 'agenda'].forEach(v => {
+                    const btn = document.getElementById('nav-' + v);
+                    if (btn) {
+                        const iconDiv = btn.querySelector('div');
+                        if (v === viewName) {
+                            btn.classList.add('text-blue-600');
+                            btn.classList.remove('text-slate-400');
+                            if (iconDiv) iconDiv.classList.add('bg-blue-50');
+                        } else {
+                            btn.classList.remove('text-blue-600');
+                            btn.classList.add('text-slate-400');
+                            if (iconDiv) iconDiv.classList.remove('bg-blue-50');
+                        }
+                    }
+                });
+            },
+
+            showNotification(message, type = 'success') {
+                const container = document.getElementById('notification-area');
+                const icon = type === 'success' ? 'check-circle' : 'alert-circle';
+                const bg = type === 'success' ? 'bg-slate-900' : 'bg-red-600';
+
+                const notif = document.createElement('div');
+                notif.className = `${bg} text-white px-5 py-4 rounded-2xl shadow-2xl flex items-center gap-3 pointer-events-auto transition-all animate-bounce-in min-w-[280px]`;
+                notif.innerHTML = `<i data-lucide="${icon}" class="w-5 h-5"></i><span class="text-sm font-bold">${message}</span>`;
+                container.appendChild(notif);
+                lucide.createIcons();
+
+                setTimeout(() => {
+                    notif.style.opacity = '0';
+                    notif.style.transform = 'translateY(-20px)';
+                    setTimeout(() => notif.remove(), 500);
+                }, 4000);
+            },
+
+            async handleSubmit(e) {
+                e.preventDefault();
+                if (!this.state.user) return this.showNotification("Aguardando conexão...", "error");
+
+                const fd = this.state.formData;
+                if (!fd.name || !fd.date || !fd.startTime || !fd.endTime || !fd.reason) return this.showNotification("Por favor, preencha todos os campos.", "error");
+
+                const newRequest = {
+                    ...fd,
+                    equipment: fd.equipment === 'Outro / Não Listado' ? fd.customEquipment : fd.equipment,
+                    status: 'pending',
+                    createdAt: new Date().toISOString(),
+                    userId: this.state.user.uid
+                };
+
+                try {
+                    await addDoc(collection(db, 'artifacts', commonAppId, 'public', 'data', 'requests'), newRequest);
+                    this.showNotification("Solicitação enviada! Aguarde a aprovação.", "success");
+                    this.state.formData = { name: '', org: '', email: '', phone: '', equipment: this.state.equipmentList[0], customEquipment: '', date: '', startTime: '08:00', endTime: '12:00', reason: '', termsAccepted: false };
+                    this.setView('home');
+                } catch (err) {
+                    console.error(err);
+                    this.showNotification("Erro ao enviar solicitação.", "error");
+                }
+            },
+
+            renderHome() {
+                const myRequests = this.state.requests.filter(r => r.userId === this.state.user?.uid);
+                const approvedCount = myRequests.filter(r => r.status === 'approved').length;
+                const pendingCount = myRequests.filter(r => r.status === 'pending').length;
+
+                return `
+                    <div class="space-y-8 pb-12">
+                        <section class="gradient-card rounded-[2.5rem] p-8 text-white shadow-2xl shadow-blue-200 relative overflow-hidden">
+                            <div class="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                            <div class="relative z-10">
+                                <h1 class="text-3xl font-extrabold mb-1">Olá!</h1>
+                                <p class="text-blue-100 text-sm font-medium mb-8 opacity-90">Bem-vindo ao Portal de Pesquisa Nerees.</p>
+                                
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
+                                        <span class="block text-[10px] font-bold uppercase tracking-widest text-blue-200 mb-1">Meus Agendamentos</span>
+                                        <span class="text-2xl font-bold">${approvedCount}</span>
+                                    </div>
+                                    <div class="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10">
+                                        <span class="block text-[10px] font-bold uppercase tracking-widest text-blue-200 mb-1">Em Análise</span>
+                                        <span class="text-2xl font-bold">${pendingCount}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section>
+                            <div class="flex items-center justify-between mb-4 px-2">
+                                <h2 class="font-bold text-slate-800 tracking-tight text-sm">Ações Rápidas</h2>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <button onclick="app.setView('form')" class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-all text-blue-600 group">
+                                    <div class="p-3 bg-blue-50 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                        <i data-lucide="calendar-plus" class="w-6 h-6"></i>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-slate-700">Novo Pedido</span>
+                                </button>
+                                <button onclick="app.setView('agenda')" class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-all text-indigo-600 group">
+                                    <div class="p-3 bg-indigo-50 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                        <i data-lucide="search" class="w-6 h-6"></i>
+                                    </div>
+                                    <span class="text-[11px] font-bold text-slate-700">Ver Agenda</span>
+                                </button>
+                            </div>
+                        </section>
+
+                        <section>
+                            <h2 class="font-bold text-slate-800 tracking-tight text-sm mb-4 px-2">Meus Últimos Pedidos</h2>
+                            <div class="space-y-3">
+                                ${myRequests.length === 0 ? `
+                                    <div class="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-10 text-center">
+                                        <p class="text-slate-400 text-xs font-medium">Nenhum pedido encontrado</p>
+                                    </div>
+                                ` : myRequests.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 3).map(r => `
+                                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                                        <div class="flex-1 mr-4">
+                                            <h3 class="font-bold text-slate-800 text-sm mb-1">${r.equipment}</h3>
+                                            <p class="text-[10px] text-slate-500 font-medium">
+                                                ${r.date ? r.date.split('-').reverse().join('/') : (r.period || 'S/D')} 
+                                                ${r.startTime ? `• ${r.startTime} - ${r.endTime}` : ''}
+                                            </p>
+                                        </div>
+                                        <span class="px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider shrink-0 ${r.status === 'approved' ? 'bg-green-100 text-green-700' :
+                        r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                    }">${r.status === 'approved' ? 'Aprovado' : r.status === 'rejected' ? 'Negado' : 'Pendente'}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </section>
+                    </div>
+                `;
+            },
+
+            renderForm() {
+                const fd = this.state.formData;
+                const eqOptions = this.state.equipmentList.map(eq => `<option value="${eq}" ${fd.equipment === eq ? 'selected' : ''}>${eq}</option>`).join('');
+
+                return `
+                    <div class="fade-in pb-12">
+                        <div class="flex items-center gap-4 mb-8">
+                            <button onclick="app.setView('home')" class="p-2.5 rounded-2xl bg-white border border-slate-100 text-slate-600 active:scale-90 transition">
+                                <i data-lucide="chevron-left" class="w-5 h-5"></i>
+                            </button>
+                            <div>
+                                <h2 class="text-2xl font-bold text-slate-900 leading-none">Solicitar Reserva</h2>
+                                <p class="text-xs text-slate-500 mt-1 font-medium">Preencha os detalhes do uso</p>
+                            </div>
+                        </div>
+
+                        <form onsubmit="app.handleSubmit(event)" class="space-y-6">
+                            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
+                                <h3 class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2 px-1">Identificação</h3>
+                                
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Seu Nome</label>
+                                    <input required class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium" 
+                                        placeholder="Nome completo" value="${fd.name}" oninput="app.handleInputChange('name', this.value)">
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Laboratório / Org</label>
+                                    <input required class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium" 
+                                        placeholder="Ex: Laboratório de Química" value="${fd.org}" oninput="app.handleInputChange('org', this.value)">
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-1.5">
+                                        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Email</label>
+                                        <input required type="email" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all" 
+                                            value="${fd.email}" oninput="app.handleInputChange('email', this.value)">
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Telefone</label>
+                                        <input required type="tel" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all" 
+                                            placeholder="(00) 00000-0000" value="${fd.phone}" oninput="app.handleInputChange('phone', this.value)">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
+                                <h3 class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2 px-1">Uso do Equipamento</h3>
+                                
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Equipamento</label>
+                                    <select class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold text-slate-700" 
+                                        onchange="app.handleInputChange('equipment', this.value)">${eqOptions}</select>
+                                </div>
+
+                                ${fd.equipment === 'Outro / Não Listado' ? `
+                                    <input required class="w-full bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl text-sm outline-none animate-slide-up font-medium" 
+                                        placeholder="Qual equipamento?" value="${fd.customEquipment}" oninput="app.handleInputChange('customEquipment', this.value)">
+                                ` : ''}
+
+                                <div class="grid grid-cols-1 gap-4">
+                                    <div class="space-y-1.5">
+                                        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Data da Reserva</label>
+                                        <input required type="date" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold" 
+                                            value="${fd.date}" oninput="app.handleInputChange('date', this.value)">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="space-y-1.5">
+                                            <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Início</label>
+                                            <input required type="time" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold" 
+                                                value="${fd.startTime}" oninput="app.handleInputChange('startTime', this.value)">
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Fim</label>
+                                            <input required type="time" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold" 
+                                                value="${fd.endTime}" oninput="app.handleInputChange('endTime', this.value)">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Finalidade</label>
+                                    <textarea required class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium" 
+                                        rows="3" placeholder="Descreva brevemente..." oninput="app.handleInputChange('reason', this.value)">${fd.reason}</textarea>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="w-full gradient-card text-white py-5 rounded-[1.5rem] font-extrabold shadow-xl shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-3">
+                                <i data-lucide="send" class="w-5 h-5"></i>
+                                Enviar para Aprovação
+                            </button>
+                        </form>
+                    </div>
+                `;
+            },
+
+            renderAgenda() {
+                const approved = this.state.requests.filter(r => r.status === 'approved');
+                const options = ['Todos', ...this.state.equipmentList].map(eq => `<option value="${eq}" ${this.state.filterEquipment === eq ? 'selected' : ''}>${eq}</option>`).join('');
+
+                // Gerar próximas datas
+                const dates = [];
+                const now = new Date();
+                for (let i = 0; i < 15; i++) { // No mobile vamos mostrar 15 dias inicias para não pesar
+                    const d = new Date(now);
+                    d.setDate(now.getDate() + i);
+                    dates.push(d.toISOString().split('T')[0]);
+                }
+
+                const slots = [
+                    { name: 'Manhã', start: '08:00', end: '12:00' },
+                    { name: 'Tarde', start: '14:00', end: '18:00' }
+                ];
+
+                return `
+                    <div class="space-y-6 pb-24 fade-in">
+                        <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-slate-100 flex items-center justify-between">
+                            <h2 class="text-xl font-extrabold text-slate-800 tracking-tight">Ocupação do Lab</h2>
+                            <div class="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+                                <i data-lucide="calendar" class="w-5 h-5"></i>
+                            </div>
+                        </div>
+
+                        <div class="relative">
+                            <select onchange="app.setFilterEquipment(this.value)" 
+                                class="w-full px-6 py-4 bg-white border border-slate-100 rounded-2xl text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 outline-none text-slate-700">
+                                ${options}
+                            </select>
+                        </div>
+
+                        <div class="space-y-10">
+                            ${dates.map(date => {
+                    const [y, m, d] = date.split('-');
+                    const dateObj = new Date(y, m - 1, d);
+                    const dayName = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' });
+                    const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+
+                    return `
+                                    <div class="space-y-4">
+                                        <div class="flex items-center justify-between px-2">
+                                            <h3 class="text-sm font-black text-slate-900 uppercase tracking-widest leading-none">
+                                                ${d} ${dateObj.toLocaleDateString('pt-BR', { month: 'short' })} • <span class="text-blue-600">${dayName}</span>
+                                            </h3>
+                                            ${isWeekend ? '<span class="text-[9px] font-black text-slate-300 uppercase">Fim de Semana</span>' : ''}
+                                        </div>
+
+                                        <div class="grid grid-cols-1 gap-3">
+                                            ${slots.map(slot => {
+                        const reservation = approved.find(r => r.date === date &&
+                            (this.state.filterEquipment === 'Todos' || r.equipment === this.state.filterEquipment) &&
+                            ((r.startTime && r.startTime.startsWith(slot.start.split(':')[0])) ||
+                                (r.period && r.period.toLowerCase().includes(slot.name.toLowerCase())))
+                        );
+
+                        if (reservation) {
+                            return `
+                                                        <div class="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-4 relative overflow-hidden">
+                                                            <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 opacity-20"></div>
+                                                            <div class="w-10 h-10 rounded-xl bg-slate-50 text-slate-400 flex items-center justify-center shrink-0">
+                                                                <i data-lucide="user" class="w-4 h-4"></i>
+                                                            </div>
+                                                            <div class="flex-1 min-w-0">
+                                                                <div class="flex items-center justify-between mb-0.5">
+                                                                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${slot.name} (${slot.start}-${slot.end})</span>
+                                                                    <span class="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Ocupado</span>
+                                                                </div>
+                                                                <h4 class="font-bold text-slate-800 text-sm truncate uppercase">${reservation.name}</h4>
+                                                                <p class="text-[9px] text-slate-500 font-bold truncate opacity-60">${reservation.equipment}</p>
+                                                            </div>
+                                                        </div>
+                                                    `;
+                        } else {
+                            return `
+                                                        <div onclick="app.openFormWithData('${date}', '${slot.start}', '${slot.end}')" 
+                                                            class="bg-slate-50/50 border-2 border-dashed border-slate-200 p-5 rounded-3xl flex items-center gap-4 group active:scale-95 transition-all">
+                                                            <div class="w-10 h-10 rounded-xl bg-white border border-slate-100 text-slate-300 flex items-center justify-center shrink-0 shadow-sm">
+                                                                <i data-lucide="plus" class="w-4 h-4"></i>
+                                                            </div>
+                                                            <div class="flex-1">
+                                                                <div class="flex items-center justify-between mb-0.5">
+                                                                    <span class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${slot.name} (${slot.start}-${slot.end})</span>
+                                                                    <span class="text-[9px] font-black text-emerald-500 uppercase">Livre</span>
+                                                                </div>
+                                                                <h4 class="text-xs font-bold text-slate-400 italic">Disponível para reserva</h4>
+                                                            </div>
+                                                        </div>
+                                                    `;
+                        }
+                    }).join('')}
+                                        </div>
+                                    </div>
+                                `;
+                }).join('')}
+                        </div>
+                    </div>
+                `;
+            },
+
+            handleInputChange(field, val) {
+                this.state.formData[field] = val;
+                if (field === 'equipment') this.render();
+            },
+
+            setFilterEquipment(val) {
+                this.state.filterEquipment = val;
+                this.render();
+            },
+
+            openFormWithData(date, start, end) {
+                this.state.formData.date = date;
+                this.state.formData.startTime = start;
+                this.state.formData.endTime = end;
+                this.setView('form');
+            },
+
+            render() {
+                const main = document.getElementById('main-content');
+                if (!main) return;
+                if (this.state.view === 'home') main.innerHTML = this.renderHome();
+                else if (this.state.view === 'form') main.innerHTML = this.renderForm();
+                else if (this.state.view === 'agenda') main.innerHTML = this.renderAgenda();
+
+                lucide.createIcons();
+            }
+        };
+
+        app.init();
+    </script>
+</body>
+
+</html>
