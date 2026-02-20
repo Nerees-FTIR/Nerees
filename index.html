@@ -209,7 +209,7 @@
                 view: 'home',
                 filterEquipment: 'Todos',
                 user: null,
-                formData: { name: '', org: '', email: '', phone: '', equipment: '', customEquipment: '', date: '', startTime: '08:00', endTime: '12:00', reason: '', termsAccepted: false }
+                formData: { name: '', org: '', email: '', phone: '', equipmentTags: '', reservationPeriod: '', usageReason: '', termsAccepted: false }
             },
 
             init() {
@@ -249,8 +249,12 @@
                 const equipRef = doc(db, 'artifacts', commonAppId, 'public', 'data', 'settings', 'equipment');
                 onSnapshot(equipRef, (s) => {
                     if (s.exists() && s.data().list) {
-                        this.state.equipmentList = s.data().list;
-                        if (!this.state.formData.equipment) this.state.formData.equipment = this.state.equipmentList[0];
+                        const allEquip = s.data().list;
+                        this.state.originalEquipmentList = allEquip.map(eq => (typeof eq === 'string' ? { name: eq, external: true } : eq));
+                        this.state.equipmentList = this.state.originalEquipmentList
+                            .filter(eq => eq.external)
+                            .map(eq => eq.name);
+                        this.renderCatalog();
                         this.render();
                     }
                 });
@@ -301,20 +305,23 @@
                 if (!this.state.user) return this.showNotification("Aguardando conexão...", "error");
 
                 const fd = this.state.formData;
-                if (!fd.name || !fd.date || !fd.startTime || !fd.endTime || !fd.reason) return this.showNotification("Por favor, preencha todos os campos.", "error");
+                if (!fd.name || !fd.usageReason || !fd.termsAccepted) return this.showNotification("Por favor, preencha todos os campos e aceite o compromisso.", "error");
 
                 const newRequest = {
                     ...fd,
                     equipment: fd.equipment === 'Outro / Não Listado' ? fd.customEquipment : fd.equipment,
                     status: 'pending',
                     createdAt: new Date().toISOString(),
-                    userId: this.state.user.uid
+                    userId: this.state.user.uid,
+                    // Removendo campos específicos se eles estiverem no fd mas não forem mais necessários
+                    startTime: '',
+                    endTime: ''
                 };
 
                 try {
                     await addDoc(collection(db, 'artifacts', commonAppId, 'public', 'data', 'requests'), newRequest);
                     this.showNotification("Solicitação enviada! Aguarde a aprovação.", "success");
-                    this.state.formData = { name: '', org: '', email: '', phone: '', equipment: this.state.equipmentList[0], customEquipment: '', date: '', startTime: '08:00', endTime: '12:00', reason: '', termsAccepted: false };
+                    this.state.formData = { name: '', org: '', email: '', phone: '', equipmentTags: '', reservationPeriod: '', usageReason: '', termsAccepted: false };
                     this.setView('home');
                 } catch (err) {
                     console.error(err);
@@ -353,17 +360,14 @@
                                 <h2 class="font-bold text-slate-800 tracking-tight text-sm">Ações Rápidas</h2>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
-                                <button onclick="app.setView('form')" class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-all text-blue-600 group">
-                                    <div class="p-3 bg-blue-50 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                                        <i data-lucide="calendar-plus" class="w-6 h-6"></i>
+                                <button onclick="app.setView('form')" class="col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col items-center gap-4 active:scale-95 transition-all text-blue-600 group">
+                                    <div class="p-5 bg-blue-50 rounded-3xl group-hover:bg-blue-600 group-hover:text-white transition-all duration-500 shadow-lg shadow-blue-500/5">
+                                        <i data-lucide="calendar-plus" class="w-8 h-8"></i>
                                     </div>
-                                    <span class="text-[11px] font-bold text-slate-700">Novo Pedido</span>
-                                </button>
-                                <button onclick="app.setView('agenda')" class="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-3 active:scale-95 transition-all text-indigo-600 group">
-                                    <div class="p-3 bg-indigo-50 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                        <i data-lucide="search" class="w-6 h-6"></i>
+                                    <div class="text-center">
+                                        <span class="text-sm font-black text-slate-800 block">Fazer Nova Solicitação</span>
+                                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 block">O ADM definirá seu horário</span>
                                     </div>
-                                    <span class="text-[11px] font-bold text-slate-700">Ver Agenda</span>
                                 </button>
                             </div>
                         </section>
@@ -407,7 +411,40 @@
                             </button>
                             <div>
                                 <h2 class="text-2xl font-bold text-slate-900 leading-none">Solicitar Reserva</h2>
-                                <p class="text-xs text-slate-500 mt-1 font-medium">Preencha os detalhes do uso</p>
+                                <p class="text-xs text-slate-500 mt-1 font-medium">Siga o Regulamento de Uso</p>
+                            </div>
+                        </div>
+
+                        <!-- Card de Regulamento -->
+                        <div class="bg-amber-50 border border-amber-100 rounded-[2rem] p-6 mb-6">
+                            <h3 class="flex items-center gap-2 text-amber-800 font-black text-xs uppercase tracking-widest mb-3">
+                                <i data-lucide="scroll-text" class="w-4 h-4"></i> Regulamento de Uso
+                            </h3>
+                            <div class="space-y-3 text-[11px] text-amber-900/70 leading-relaxed max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                                <p><strong>1. Objetivo:</strong> Estabelecer diretrizes para a segurança e conservação dos equipamentos.</p>
+                                <p><strong>2. Procedimento:</strong> Preencher formulário com TAG clara; enviar com no mínimo 24h de antecedência.</p>
+                                <p><strong>3. Uso:</strong> Exclusivo para finalidades aprovadas; proibido modificações; limpeza e desligamento obrigatórios.</p>
+                                <p><strong>4. Responsabilidades:</strong> Conhecimento operacional necessário; uso de EPIs; responsabilidade por danos.</p>
+                                <p><strong>5. Penalidades:</strong> Advertências ou suspensão do direito de uso.</p>
+                            </div>
+                            <button type="button" onclick="app.showFullRegulation()" class="mt-4 text-[10px] font-black text-amber-600 uppercase tracking-widest flex items-center gap-1 hover:text-amber-700">
+                                Ler Regulamento Completo <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                            </button>
+                        </div>
+
+                        <!-- Catálogo de Equipamentos -->
+                        <div class="bg-white border border-slate-100 rounded-[2rem] p-6 mb-6 shadow-sm">
+                            <h3 class="flex items-center gap-2 text-slate-800 font-black text-xs uppercase tracking-widest mb-4">
+                                <i data-lucide="search" class="w-4 h-4 text-blue-600"></i> Catálogo (Consulte as TAGs)
+                            </h3>
+                            <div class="relative mb-4">
+                                <input type="text" id="catalog-search" oninput="app.filterCatalog(this.value)" 
+                                    placeholder="Buscar equipamento..." 
+                                    class="w-full bg-slate-50 border-none p-3 pl-10 rounded-xl text-[11px] font-medium focus:ring-2 focus:ring-blue-500 transition-all">
+                                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                            </div>
+                            <div id="equipment-catalog" class="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                <!-- Preenchido via JS -->
                             </div>
                         </div>
 
@@ -422,9 +459,9 @@
                                 </div>
 
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Laboratório / Org</label>
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Orientador(a) e/ou Grupo de Pesquisa</label>
                                     <input required class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium" 
-                                        placeholder="Ex: Laboratório de Química" value="${fd.org}" oninput="app.handleInputChange('org', this.value)">
+                                        placeholder="Ex: Prof. Dr. Silva / Grupo de Polímeros" value="${fd.org}" oninput="app.handleInputChange('org', this.value)">
                                 </div>
 
                                 <div class="grid grid-cols-2 gap-4">
@@ -434,57 +471,60 @@
                                             value="${fd.email}" oninput="app.handleInputChange('email', this.value)">
                                     </div>
                                     <div class="space-y-1.5">
-                                        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Telefone</label>
+                                        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Contato Telefônico</label>
                                         <input required type="tel" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all" 
-                                            placeholder="(00) 00000-0000" value="${fd.phone}" oninput="app.handleInputChange('phone', this.value)">
+                                            placeholder="(00)00000-0000" value="${fd.phone}" oninput="app.handleInputChange('phone', this.value)">
                                     </div>
                                 </div>
                             </div>
 
                             <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-5">
-                                <h3 class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2 px-1">Uso do Equipamento</h3>
+                                <h3 class="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-2 px-1">Detalhes da Reserva</h3>
                                 
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Equipamento</label>
-                                    <select class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold text-slate-700" 
-                                        onchange="app.handleInputChange('equipment', this.value)">${eqOptions}</select>
-                                </div>
-
-                                ${fd.equipment === 'Outro / Não Listado' ? `
-                                    <input required class="w-full bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl text-sm outline-none animate-slide-up font-medium" 
-                                        placeholder="Qual equipamento?" value="${fd.customEquipment}" oninput="app.handleInputChange('customEquipment', this.value)">
-                                ` : ''}
-
-                                <div class="grid grid-cols-1 gap-4">
-                                    <div class="space-y-1.5">
-                                        <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Data da Reserva</label>
-                                        <input required type="date" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold" 
-                                            value="${fd.date}" oninput="app.handleInputChange('date', this.value)">
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-4">
-                                        <div class="space-y-1.5">
-                                            <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Início</label>
-                                            <input required type="time" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold" 
-                                                value="${fd.startTime}" oninput="app.handleInputChange('startTime', this.value)">
-                                        </div>
-                                        <div class="space-y-1.5">
-                                            <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Fim</label>
-                                            <input required type="time" class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold" 
-                                                value="${fd.endTime}" oninput="app.handleInputChange('endTime', this.value)">
-                                        </div>
-                                    </div>
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">TAGs dos Equipamentos Solicitados</label>
+                                    <input required class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-bold" 
+                                        placeholder="Ex: SB.008, CR.001" value="${fd.equipmentTags}" oninput="app.handleInputChange('equipmentTags', this.value)">
+                                    <p class="text-[9px] text-slate-400 ml-1">Consulte as TAGs no catálogo de equipamentos.</p>
                                 </div>
 
                                 <div class="space-y-1.5">
-                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Finalidade</label>
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Período Previsto (dd/mm/aa a dd/mm/aa)</label>
+                                    <input required class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium" 
+                                        placeholder="01/03/26 a 05/03/26" value="${fd.reservationPeriod}" oninput="app.handleInputChange('reservationPeriod', this.value)">
+                                </div>
+
+                                <div class="space-y-1.5">
+                                    <label class="text-[11px] font-bold text-slate-400 uppercase tracking-wider ml-1">Descreva a necessidade da utilização</label>
                                     <textarea required class="w-full bg-slate-50 border-none p-4 rounded-2xl text-sm focus:ring-2 focus:ring-blue-500 transition-all font-medium" 
-                                        rows="3" placeholder="Descreva brevemente..." oninput="app.handleInputChange('reason', this.value)">${fd.reason}</textarea>
+                                        rows="3" placeholder="Qual a finalidade do uso?" oninput="app.handleInputChange('usageReason', this.value)">${fd.usageReason}</textarea>
+                                </div>
+                            </div>
+
+                            <div class="px-2 space-y-4">
+                                <label class="flex items-start gap-4 cursor-pointer group">
+                                    <div class="relative flex items-center mt-1">
+                                        <input type="checkbox" class="peer hidden" ${fd.termsAccepted ? 'checked' : ''} onchange="app.handleInputChange('termsAccepted', this.checked)">
+                                        <div class="w-6 h-6 border-2 border-slate-200 rounded-lg peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-all flex items-center justify-center">
+                                            <i data-lucide="check" class="w-4 h-4 text-white"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <p class="text-[11px] font-bold text-slate-600 leading-tight">Declaração de Compromisso</p>
+                                        <p class="text-[10px] text-slate-400 mt-1 leading-relaxed">Ao preencher este formulário, você assume cumprir todas as exigências descritas no regulamento de uso dos equipamentos.</p>
+                                    </div>
+                                </label>
+
+                                <div class="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50">
+                                    <p class="text-[9px] text-blue-600 font-bold leading-relaxed">
+                                        Após enviar, entre em contato com nosso técnico informando a solicitação. Retorno em até 24h úteis.
+                                    </p>
                                 </div>
                             </div>
 
                             <button type="submit" class="w-full gradient-card text-white py-5 rounded-[1.5rem] font-extrabold shadow-xl shadow-blue-200 active:scale-95 transition-all flex items-center justify-center gap-3">
                                 <i data-lucide="send" class="w-5 h-5"></i>
-                                Enviar para Aprovação
+                                Enviar Solicitação
                             </button>
                         </form>
                     </div>
@@ -561,7 +601,7 @@
                                                                     <span class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">${slot.name} (${slot.start}-${slot.end})</span>
                                                                     <span class="text-[9px] font-black text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded uppercase">Ocupado</span>
                                                                 </div>
-                                                                <h4 class="font-bold text-slate-800 text-sm truncate uppercase">${reservation.name}</h4>
+                                                                <h4 class="font-bold text-slate-800 text-sm truncate uppercase">Agendado</h4>
                                                                 <p class="text-[9px] text-slate-500 font-bold truncate opacity-60">${reservation.equipment}</p>
                                                             </div>
                                                         </div>
@@ -603,6 +643,60 @@
                 this.render();
             },
 
+            showFullRegulation() {
+                const modal = document.createElement('div');
+                modal.className = "fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md p-6 flex items-center justify-center animate-fade-in";
+                modal.id = "regulation-modal";
+                modal.innerHTML = `
+                    <div class="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden slide-up max-h-[85vh] flex flex-col">
+                        <div class="p-8 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
+                            <div>
+                                <h2 class="text-xl font-black text-amber-900">Regulamento Completo</h2>
+                                <p class="text-[10px] font-bold text-amber-600 uppercase tracking-widest mt-1">Uso de Equipamentos • Nerees</p>
+                            </div>
+                            <button onclick="document.getElementById('regulation-modal').remove()" class="p-2 hover:bg-amber-100 rounded-xl transition-all">
+                                <i data-lucide="x" class="w-5 h-5 text-amber-900"></i>
+                            </button>
+                        </div>
+                        <div class="p-8 overflow-y-auto text-sm text-slate-600 space-y-6 leading-relaxed custom-scrollbar">
+                            <section>
+                                <h4 class="font-black text-slate-900 uppercase text-[11px] tracking-widest mb-3">1. Objetivo</h4>
+                                <p>Este regulamento tem como objetivo estabelecer diretrizes para a solicitação e o uso dos equipamentos disponíveis no laboratório, garantindo a segurança, a conservação dos equipamentos e a formalização adequada do processo de utilização.</p>
+                            </section>
+                            <section>
+                                <h4 class="font-black text-slate-900 uppercase text-[11px] tracking-widest mb-3">2. Procedimento para Solicitação</h4>
+                                <p>2.1. Todos os usuários devem preencher o formulário de solicitação disponível, indicando claramente o equipamento desejado, a data e o período de uso.</p>
+                                <p>2.2. O solicitante deve consultar a TAG do equipamento no catálogo antes de preencher. A TAG é a identificação única.</p>
+                                <p>2.3. Solicitação enviada com no mínimo 24 horas de antecedência, informando período e flexibilidades.</p>
+                                <p>2.4. Sujeita à disponibilidade e análise técnica.</p>
+                            </section>
+                            <section>
+                                <h4 class="font-black text-slate-900 uppercase text-[11px] tracking-widest mb-3">3. Uso dos Equipamentos</h4>
+                                <p>3.1. Uso exclusivo para finalidades descritas e aprovadas.</p>
+                                <p>3.2. Proibido alterações nos equipamentos sem autorização.</p>
+                                <p>3.3. Responsabilidade pela conservação; danos devem ser reportados imediatamente.</p>
+                                <p>3.4. Devolução com procedimentos de limpeza e desligamento obrigatórios.</p>
+                            </section>
+                            <section>
+                                <h4 class="font-black text-slate-900 uppercase text-[11px] tracking-widest mb-3">4. Responsabilidades</h4>
+                                <p>4.1. O solicitante deve assegurar conhecimento técnico para operar. Caso contrário, solicitar orientação prévia.</p>
+                                <p>4.2. Respeitar normas de segurança e uso de EPIs.</p>
+                                <p>4.3. Responsividade por danos causados por uso inadequado ou negligência.</p>
+                            </section>
+                            <section>
+                                <h4 class="font-black text-slate-900 uppercase text-[11px] tracking-widest mb-3">5. Penalidades</h4>
+                                <p>5.1. O descumprimento poderá resultar em advertências ou suspensão temporária do direito de uso.</p>
+                            </section>
+                        </div>
+                        <div class="p-8 bg-slate-50 border-t border-slate-100 flex gap-4">
+                            <button onclick="document.getElementById('regulation-modal').remove()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">Entendido</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                lucide.createIcons();
+            },
+
             openFormWithData(date, start, end) {
                 this.state.formData.date = date;
                 this.state.formData.startTime = start;
@@ -617,6 +711,34 @@
                 else if (this.state.view === 'form') main.innerHTML = this.renderForm();
                 else if (this.state.view === 'agenda') main.innerHTML = this.renderAgenda();
 
+                lucide.createIcons();
+            },
+
+            filterCatalog(val) {
+                this.renderCatalog(val);
+            },
+
+            renderCatalog(filter = '') {
+                const container = document.getElementById('equipment-catalog');
+                if (!container) return;
+
+                const list = this.state.originalEquipmentList || [];
+                const filtered = list.filter(eq =>
+                    eq.external && eq.name.toLowerCase().includes(filter.toLowerCase())
+                );
+
+                if (filtered.length === 0) {
+                    container.innerHTML = `<p class="text-[10px] text-slate-400 italic text-center py-4">Nenhum equipamento público encontrado.</p>`;
+                    return;
+                }
+
+                container.innerHTML = filtered.map(eq => `
+                    <div onclick="document.querySelector('[placeholder=\\'Ex: SB.008, CR.001\\']').value = '${eq.name.split('(')[1]?.replace(')', '') || eq.name}'; app.handleInputChange('equipmentTags', document.querySelector('[placeholder=\\'Ex: SB.008, CR.001\\']').value)" 
+                        class="p-3 bg-slate-50 rounded-xl flex items-center justify-between group cursor-pointer hover:bg-blue-50 transition-all border border-transparent hover:border-blue-100">
+                        <span class="text-[10px] font-bold text-slate-700">${eq.name}</span>
+                        <i data-lucide="plus-circle" class="w-3 h-3 text-slate-300 group-hover:text-blue-500"></i>
+                    </div>
+                `).join('');
                 lucide.createIcons();
             }
         };
